@@ -99,6 +99,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut pet_list_state = ListState::default();
     pet_list_state.select(Some(0));
 
+    let pet_list = read_db().expect("can fetch pet list");
+
     #[allow(unreachable_code)]
     loop {
         terminal.draw(|rect| {
@@ -171,7 +173,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             [Constraint::Percentage(20), Constraint::Percentage(80)].as_ref(),
                         )
                         .split(chunks[1]);
-                    let (left, right) = render_pets(&pet_list_state);
+                    let (left, right) = render_pets(&pet_list, &pet_list_state);
                     rect.render_stateful_widget(left, pet_chunks[0], &mut pet_list_state);
                     rect.render_widget(right, pet_chunks[1]);
                 }
@@ -187,6 +189,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 KeyCode::Char('h') => active_menu_item = MenuItem::Home,
                 KeyCode::Char('p') => active_menu_item = MenuItem::Pets,
+                KeyCode::Up if active_menu_item == MenuItem::Pets => {
+                    let mut selected = pet_list_state
+                        .selected()
+                        .expect("there's always a pet selected");
+                    // The logic works but it'll panic because selected is usize, so better use if-else
+                    if selected == 0 {
+                        selected = pet_list.len();
+                    }
+                    // below line will still work, if selected would have been int type, then above if block is redundant
+                    pet_list_state.select(Some((selected - 1 + pet_list.len()) % pet_list.len()));
+                }
+                KeyCode::Down if active_menu_item == MenuItem::Pets => {
+                    let selected = pet_list_state
+                        .selected()
+                        .expect("there's always a pet selected");
+                    pet_list_state.select(Some((selected + 1) % pet_list.len()));
+                }
                 _ => {}
             },
             Event::Tick => {}
@@ -225,14 +244,12 @@ fn read_db() -> Result<Vec<Pet>, Error> {
     Ok(serde_json::from_str(&db_content)?)
 }
 
-fn render_pets<'a>(pet_list_state: &ListState) -> (List<'a>, Table<'a>) {
+fn render_pets<'a>(pet_list: &Vec<Pet>, pet_list_state: &ListState) -> (List<'a>, Table<'a>) {
     let pets = Block::default()
         .borders(Borders::ALL)
         .style(Style::default().fg(Color::White))
         .title("Pets")
         .border_type(BorderType::Plain);
-
-    let pet_list = read_db().expect("can fetch pet list");
 
     let items = pet_list
         .iter()
