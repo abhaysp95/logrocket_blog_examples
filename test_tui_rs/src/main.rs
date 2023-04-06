@@ -13,7 +13,7 @@ use crossterm::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tui::{
-    backend::CrosstermBackend,
+    backend::{Backend, CrosstermBackend},
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
@@ -62,37 +62,10 @@ impl From<MenuItem> for usize {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    enable_raw_mode().expect("can't run in raw mode");
-
-    let (tx, rx) = mpsc::channel();
-    let tick_rate = Duration::from_millis(200);
-    thread::spawn(move || {
-        let mut last_tick = Instant::now();
-        loop {
-            let timeout = tick_rate
-                .checked_sub(last_tick.elapsed())
-                .unwrap_or_else(|| Duration::from_secs(0));
-
-            if event::poll(timeout).expect("poll works") {
-                if let CEvent::Key(key) = event::read().expect("can read events") {
-                    tx.send(Event::Input(key)).expect("can send events");
-                }
-            }
-
-            if last_tick.elapsed() >= tick_rate {
-                if let Ok(_) = tx.send(Event::Tick) {
-                    last_tick = Instant::now();
-                }
-            }
-        }
-    });
-
-    let stdout = io::stdout();
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    terminal.clear()?;
-
+fn render_main_ui<B>(terminal: &mut Terminal<B>) -> Result<(), Box<dyn std::error::Error>>
+where
+    B: Backend,
+{
     let menu_titles = vec!["Home", "Pets", "Add", "Delete", "Quit"];
     let mut active_menu_item = MenuItem::Home;
 
@@ -189,6 +162,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 KeyCode::Char('h') => active_menu_item = MenuItem::Home,
                 KeyCode::Char('p') => active_menu_item = MenuItem::Pets,
+                KeyCode::Char('a') => {
+                    unimplemented!() // need to render new ui for input
+                                     // add_pets();
+                }
+                KeyCode::Char('d') => {
+                    unimplemented!()
+                    // delete_pets();
+                }
                 KeyCode::Up if active_menu_item == MenuItem::Pets => {
                     let mut selected = pet_list_state
                         .selected()
@@ -211,6 +192,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Event::Tick => {}
         }
     }
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    enable_raw_mode().expect("can't run in raw mode");
+
+    let (tx, rx) = mpsc::channel();
+    let tick_rate = Duration::from_millis(200);
+    thread::spawn(move || {
+        let mut last_tick = Instant::now();
+        loop {
+            let timeout = tick_rate
+                .checked_sub(last_tick.elapsed())
+                .unwrap_or_else(|| Duration::from_secs(0));
+
+            if event::poll(timeout).expect("poll works") {
+                if let CEvent::Key(key) = event::read().expect("can read events") {
+                    tx.send(Event::Input(key)).expect("can send events");
+                }
+            }
+
+            if last_tick.elapsed() >= tick_rate {
+                if let Ok(_) = tx.send(Event::Tick) {
+                    last_tick = Instant::now();
+                }
+            }
+        }
+    });
+
+    let stdout = io::stdout();
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
 
     Ok(())
 }
